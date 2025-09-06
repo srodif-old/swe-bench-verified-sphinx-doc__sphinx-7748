@@ -144,6 +144,34 @@ First line of docstring
         return 456
 
 
+class DocstringSigOverloaded:
+    """A class to test overloaded method signature extraction."""
+    
+    def overloaded_method(self):
+        """overloaded_method(self, x: int, y: str) -> bool
+        overloaded_method(self, x: int) -> int
+        overloaded_method(self) -> None
+        
+        A method with multiple overloaded signatures.
+        This tests the new functionality for extracting all signatures.
+        """
+        pass
+        
+    def single_method(self):
+        """single_method(self, value: float) -> str
+        
+        A method with single signature (should work as before).
+        """
+        pass
+        
+    def no_sig_method(self):
+        """
+        A method without signature in docstring.
+        Should return None for signature extraction.
+        """
+        pass
+
+
 class StrRepr(str):
     """docstring"""
 
