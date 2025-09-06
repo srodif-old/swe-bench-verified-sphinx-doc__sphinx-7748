@@ -763,3 +763,36 @@ def test_autodoc_default_options_with_values(app):
         assert '      list of weak references to the object (if defined)' not in actual
     assert '   .. py:method:: CustomIter.snafucate()' not in actual
     assert '      Makes this snafucated.' not in actual
+
+
+@pytest.mark.sphinx('html', testroot='ext-autodoc')
+def test_autodoc_docstring_signature_overloaded(app):
+    """Test that autodoc_docstring_signature can extract multiple overloaded signatures."""
+    options = {"members": None}
+    actual = do_autodoc(app, 'class', 'target.DocstringSigOverloaded', options)
+    
+    # Check that overloaded method shows all signatures combined
+    overloaded_method_found = False
+    single_method_found = False
+    no_sig_method_found = False
+    
+    for line in actual:
+        if 'overloaded_method(' in line and 'py:method::' in line:
+            overloaded_method_found = True
+            # Should contain all three signature variations combined
+            assert 'x: int, y: str' in line or 'x: int | y: str' in line
+            assert 'x: int' in line
+            # Check that return type shows all possibilities
+            assert '-> bool | int | None' in line or '-> int | bool | None' in line or 'bool' in line
+        elif 'single_method(' in line and 'py:method::' in line:
+            single_method_found = True
+            # Should work exactly like before
+            assert 'value: float' in line
+            assert '-> str' in line
+        elif 'no_sig_method()' in line and 'py:method::' in line:
+            no_sig_method_found = True
+            # Should have no signature extracted (just method name)
+    
+    assert overloaded_method_found, "overloaded_method signature not found in output"
+    assert single_method_found, "single_method signature not found in output"
+    assert no_sig_method_found, "no_sig_method not found in output"

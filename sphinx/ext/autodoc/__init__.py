@@ -1049,26 +1049,90 @@ class DocstringSignatureMixin:
             # no lines in docstring, no match
             if not doclines:
                 continue
-            # match first line of docstring against signature RE
-            match = py_ext_sig_re.match(doclines[0])
-            if not match:
-                continue
-            exmod, path, base, args, retann = match.groups()
-            # the base name must match ours
+            
+            # Find all consecutive signature lines at the start of docstring
+            signatures = []
+            lines_consumed = 0
             valid_names = [self.objpath[-1]]  # type: ignore
             if isinstance(self, ClassDocumenter):
                 valid_names.append('__init__')
                 if hasattr(self.object, '__mro__'):
                     valid_names.extend(cls.__name__ for cls in self.object.__mro__)
-            if base not in valid_names:
-                continue
-            # re-prepare docstring to ignore more leading indentation
-            tab_width = self.directive.state.document.settings.tab_width  # type: ignore
-            self._new_docstrings[i] = prepare_docstring('\n'.join(doclines[1:]),
-                                                        tabsize=tab_width)
-            result = args, retann
-            # don't look any further
-            break
+            
+            for line_idx, line in enumerate(doclines):
+                # Try to match current line (with stripped whitespace for subsequent lines)
+                line_to_check = line if line_idx == 0 else line.strip()
+                if not line_to_check:  # Skip empty lines
+                    lines_consumed = line_idx + 1
+                    continue
+                    
+                match = py_ext_sig_re.match(line_to_check)
+                
+                if not match:
+                    # If this is not the first line and no match, stop looking for more signatures
+                    break
+                    
+                exmod, path, base, args, retann = match.groups()
+                
+                # the base name must match ours
+                if base not in valid_names:
+                    # If this is the first line and name doesn't match, this docstring doesn't contain signatures
+                    if line_idx == 0:
+                        break
+                    # If subsequent line doesn't match name, stop looking for more signatures
+                    else:
+                        break
+                
+                # Found a valid signature
+                signatures.append((args, retann))
+                lines_consumed = line_idx + 1
+            
+            if signatures:
+                # Found at least one signature
+                if len(signatures) == 1:
+                    # Single signature, use as-is
+                    result = signatures[0]
+                else:
+                    # Multiple signatures (overloads)
+                    # Combine them in a format that shows all overloads
+                    sig_parts = []
+                    return_types = []
+                    
+                    for args, retann in signatures:
+                        # Format each signature part
+                        if args:
+                            sig_parts.append(args)
+                        else:
+                            sig_parts.append("")  # Empty args for no-argument overloads
+                        
+                        if retann:
+                            return_types.append(retann)
+                    
+                    # Join multiple argument lists to show alternatives
+                    # Represent empty arguments as empty string, which will show as () in final signature
+                    combined_args = " | ".join(sig_parts)
+                    
+                    # Preserve order of return types (first occurrence order)
+                    if return_types:
+                        # Keep original order but remove duplicates
+                        seen = set()
+                        ordered_return_types = []
+                        for rt in return_types:
+                            if rt not in seen:
+                                ordered_return_types.append(rt)
+                                seen.add(rt)
+                        combined_retann = " | ".join(ordered_return_types)
+                    else:
+                        combined_retann = None
+                    
+                    result = (combined_args, combined_retann)
+                
+                # re-prepare docstring to ignore signature lines
+                tab_width = self.directive.state.document.settings.tab_width  # type: ignore
+                remaining_lines = doclines[lines_consumed:] if lines_consumed < len(doclines) else []
+                self._new_docstrings[i] = prepare_docstring('\n'.join(remaining_lines),
+                                                            tabsize=tab_width)
+                break
         return result
 
     def get_doc(self, encoding: str = None, ignore: int = None) -> List[List[str]]:
